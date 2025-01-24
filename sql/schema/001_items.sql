@@ -1,0 +1,10 @@
+-- +goose Up
+CREATE TABLE items (
+  id INTEGER PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+
+-- +goose Down
+DROP TABLE items;
