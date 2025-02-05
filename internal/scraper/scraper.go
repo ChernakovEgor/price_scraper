@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -13,8 +14,44 @@ import (
 	"golang.org/x/net/html"
 )
 
-func FetchURL(db *database.Queries, urlID int, url string) (int, error) {
-	resp, err := http.Get(url)
+const agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36"
+
+type Scraper struct {
+	db *database.Queries
+}
+
+func NewScraper(db *database.Queries) Scraper {
+	return Scraper{db}
+}
+
+func (s *Scraper) ProcessURLs() error {
+	urls, err := s.db.GetURLs(context.Background())
+	if err != nil {
+		return fmt.Errorf("getting urls from db: %v", err)
+	}
+
+	log.Print("Starting to process URLs...")
+	for _, url := range urls {
+		_, err := s.FetchURL(int(url.ID), url.Url)
+		if err != nil {
+			log.Printf("error fetching '%s...': %v", url.Url[:10], err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Scraper) FetchURL(urlID int, url string) (int, error) {
+	log.Printf("Begin fetching %s", url)
+	client := http.DefaultClient
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("creating request: %v", err)
+	}
+
+	req.Header.Set("User-Agent", agent)
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("fetching url '%s': %w", url, err)
 	}
@@ -30,7 +67,7 @@ func FetchURL(db *database.Queries, urlID int, url string) (int, error) {
 		StatusCode: int64(resp.StatusCode),
 		RawBody:    sql.NullString{String: string(rawHTML), Valid: true},
 	}
-	result, err := db.AddParsingResult(context.Background(), params)
+	result, err := s.db.AddParsingResult(context.Background(), params)
 
 	return int(result.ID), nil
 }
